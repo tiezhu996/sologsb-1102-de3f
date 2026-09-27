@@ -5,6 +5,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import {
+  Alert,
   App,
   Button,
   Checkbox,
@@ -21,11 +22,15 @@ import {
   Space,
   Statistic,
   Tag,
+  Tooltip,
   Typography,
 } from 'antd';
 import {
   ArrowLeftOutlined,
+  CalendarOutlined,
   CheckSquareOutlined,
+  CopyOutlined,
+  DownloadOutlined,
   PlusOutlined,
   SaveOutlined,
   SoundOutlined,
@@ -33,12 +38,17 @@ import {
 } from '@ant-design/icons';
 import { SceneCard } from '../components/common/SceneCard';
 import { EmptyState } from '../components/common/EmptyState';
+import { SceneScheduleModal } from '../components/SceneScheduleModal';
 import { useSceneOrder } from '../hooks/useSceneOrder';
+import { useSceneSchedule } from '../hooks/useSceneSchedule';
 import { usePlayStore } from '../stores/playStore';
 import { useSceneStore } from '../stores/sceneStore';
 import { useOperatorStore } from '../stores/operatorStore';
 import { ROUTES } from '../router';
 import { SHADOW_SCREEN_LABEL, SHADOW_SCREEN_OPTIONS, type SceneDraft, createEmptySceneDraft } from '../types/scene';
+import { slotText, type SlotStatus } from '../utils/schedule';
+import { listCuesByScenes, listRolesByScenes } from '../utils/db';
+import { buildCallSheetText, copyText, exportPlayCsvFile } from '../utils/export';
 import { minutesToReadable } from '../utils/timecode';
 import { formatStamp } from '../utils/uuid';
 import type { SceneRow } from '../utils/db';
@@ -78,10 +88,13 @@ export default function SceneBoard() {
 
   const operators = useOperatorStore((state) => state.operators);
 
+  const schedule = useSceneSchedule(playId);
+
   const [activeSceneId, setActiveSceneId] = useState<string | null>(null);
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const [dropTargetId, setDropTargetId] = useState<string | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
+  const [scheduleOpen, setScheduleOpen] = useState(false);
 
   const play = plays.find((item) => item.id === playId) ?? null;
   const playStat = statOf(playId);
@@ -158,6 +171,32 @@ export default function SceneBoard() {
     });
   };
 
+  /** 场序表卡片上的档期标签：排定且干净为绿色，撞期为红色 */
+  const renderScheduleTag = (scene: SceneRow) => {
+    const slot = scene.rehearsalSlot;
+    if (!slot) return <Tag>未排档期</Tag>;
+    const status = schedule.statusOf(scene.id);
+    const blocked = status.state === 'blocked';
+    return (
+      <Tooltip
+        title={
+          blocked
+            ? status.conflicts
+                .map((conflict) =>
+                  conflict.operatorName !== null ? `撞了${conflict.operatorName}师傅：${conflict.describe}` : conflict.describe,
+                )
+                .join('；')
+            : `排练档期 ${slotText(slot)}`
+        }
+      >
+        <Tag color={blocked ? 'red' : 'green'} icon={<CalendarOutlined />}>
+          {slotText(slot)}
+          {blocked ? ' 撞期' : ''}
+        </Tag>
+      </Tooltip>
+    );
+  };
+
   if (!play) {
     return (
       <div className="gb-panel">
@@ -170,6 +209,22 @@ export default function SceneBoard() {
       </div>
     );
   }
+
+  /** 导出排练通告 CSV：带场次、星期与参演师傅 */
+  const handleExportNotice = async () => {
+    const sceneIds = scenes.map((scene) => scene.id);
+    const [roleRows, cueRows] = await Promise.all([listRolesByScenes(sceneIds), listCuesByScenes(sceneIds)]);
+    const filename = exportPlayCsvFile(play, scenes, roleRows, cueRows, operators);
+    message.success(`已导出排练通告：${filename}`);
+  };
+
+  /** 复制排练通告纯文本 */
+  const handleCopyNotice = async () => {
+    const roleRows = await listRolesByScenes(scenes.map((scene) => scene.id));
+    const ok = await copyText(buildCallSheetText(play, scenes, roleRows, operators));
+    if (ok) message.success('排练通告文本已复制，可贴给班社群里');
+    else message.error('复制失败，请检查浏览器剪贴板权限');
+  };
 
   return (
     <Space direction="vertical" size={16} style={{ width: '100%' }}>
@@ -203,21 +258,35 @@ export default function SceneBoard() {
             >
               锣鼓点
             </Button>
+            <Button icon={<DownloadOutlined />} disabled={scenes.length === 0} onClick={() => void handleExportNotice()}>
+              导出排练通告
+            </Button>
+            <Button icon={<CopyOutlined />} disabled={scenes.length === 0} onClick={() => void handleCopyNotice()}>
+              复制通告文本
+            </Button>
           </Space>
         </div>
 
         <Row gutter={16}>
-          <Col xs={12} md={6}>
+          <Col xs={12} md={4}>
             <Statistic title="整剧合计时长" value={totalMinute} suffix="分钟" />
           </Col>
-          <Col xs={12} md={6}>
+          <Col xs={12} md={4}>
             <Statistic title="本次排练勾选" value={selectedSceneIds.length} suffix={`/ ${scenes.length} 场`} />
           </Col>
-          <Col xs={12} md={6}>
+          <Col xs={12} md={4}>
             <Statistic title="勾选场次合计" value={selectedMinute} suffix="分钟" />
           </Col>
-          <Col xs={12} md={6}>
+          <Col xs={12} md={4}>
             <Statistic title="平均排练成熟度" value={playStat.averageProgress} suffix="%" />
+          </Col>
+          <Col xs={12} md={4}>
+            <Statistic
+              title={schedule.blockedCount > 0 ? `已排档期（撞期 ${schedule.blockedCount} 场）` : '已排档期'}
+              value={scenes.filter((scene) => scene.rehearsalSlot !== null).length}
+              suffix={`/ ${scenes.length} 场`}
+              valueStyle={schedule.blockedCount > 0 ? { color: '#cf1322' } : undefined}
+            />
           </Col>
         </Row>
 
@@ -312,6 +381,7 @@ export default function SceneBoard() {
                           onDrop={() => {
                             void handleReorder(item.scene.id);
                           }}
+                          scheduleTag={renderScheduleTag(item.scene)}
                           extraActions={
                             <Tag color={selectedSceneIds.includes(item.scene.id) ? '#7a1f1f' : 'default'}>
                               {selectedSceneIds.includes(item.scene.id) ? '本次排练' : '本次跳过'}
@@ -335,11 +405,17 @@ export default function SceneBoard() {
                   startTimecode={activeItem.startTimecode}
                   accumulatedMinute={activeItem.accumulatedMinute}
                   operatorCount={operators.length}
+                  slotStatus={schedule.statusOf(activeItem.scene.id)}
                   onSave={updateScene}
                   onProgress={(delta) => void bumpProgress(activeItem.scene.id, delta)}
                   onDelete={() => confirmDelete(activeItem.scene.id, activeItem.scene.title)}
                   onRoles={() => navigate(ROUTES.roles(activeItem.scene.id))}
                   onCues={() => navigate(ROUTES.cues(activeItem.scene.id))}
+                  onSchedule={() => setScheduleOpen(true)}
+                  onClearSchedule={async () => {
+                    await schedule.clear(activeItem.scene.id);
+                    message.success('排练档期已取消');
+                  }}
                 />
               ) : (
                 <EmptyState
@@ -385,6 +461,15 @@ export default function SceneBoard() {
           </Form.Item>
         </Form>
       </Modal>
+
+      <SceneScheduleModal
+        open={scheduleOpen && activeItem !== null}
+        scene={activeItem?.scene ?? null}
+        cast={activeItem ? schedule.castOf(activeItem.scene.id) : []}
+        preview={schedule.preview}
+        onSave={schedule.save}
+        onCancel={() => setScheduleOpen(false)}
+      />
     </Space>
   );
 }
@@ -404,6 +489,7 @@ interface SceneDetailPanelProps {
   startTimecode: string;
   accumulatedMinute: number;
   operatorCount: number;
+  slotStatus: SlotStatus;
   onSave: (
     sceneId: string,
     patch: Partial<Omit<SceneRow, 'id' | 'playId' | 'createdAt' | 'revision'>>,
@@ -412,6 +498,8 @@ interface SceneDetailPanelProps {
   onDelete: () => void;
   onRoles: () => void;
   onCues: () => void;
+  onSchedule: () => void;
+  onClearSchedule: () => void;
 }
 
 function SceneDetailPanel({
@@ -419,11 +507,14 @@ function SceneDetailPanel({
   startTimecode,
   accumulatedMinute,
   operatorCount,
+  slotStatus,
   onSave,
   onProgress,
   onDelete,
   onRoles,
   onCues,
+  onSchedule,
+  onClearSchedule,
 }: SceneDetailPanelProps) {
   const { message } = App.useApp();
   const scene = useSceneStore((state) => state.scenes.find((item) => item.id === sceneId) ?? null);
@@ -502,6 +593,59 @@ function SceneDetailPanel({
 
       <div>
         <Space style={{ width: '100%', justifyContent: 'space-between' }} wrap>
+          <Typography.Text type="secondary">排练档期</Typography.Text>
+          <Space size={4}>
+            <Button size="small" type="primary" ghost icon={<CalendarOutlined />} onClick={onSchedule}>
+              {scene.rehearsalSlot ? '改期' : '排定档期'}
+            </Button>
+            {scene.rehearsalSlot ? (
+              <Button size="small" danger onClick={onClearSchedule}>
+                取消档期
+              </Button>
+            ) : null}
+          </Space>
+        </Space>
+        {scene.rehearsalSlot === null ? (
+          <Alert
+            style={{ marginTop: 6 }}
+            type="info"
+            showIcon
+            message="尚未排定排练档期"
+            description="选星期、起始时间和时长即可排定；保存前会先核对本场各影人操耍人的档期与别场排练，撞期会先搁下并报出撞了哪位师傅。"
+          />
+        ) : slotStatus.state === 'blocked' ? (
+          <Alert
+            style={{ marginTop: 6 }}
+            type="error"
+            showIcon
+            message={`${slotText(scene.rehearsalSlot)} · 撞期 ${slotStatus.conflicts.length} 处，建议尽快改期`}
+            description={
+              <Space direction="vertical" size={2}>
+                {slotStatus.conflicts.map((conflict, index) => (
+                  <Typography.Text key={index} type="danger" style={{ fontSize: 12 }}>
+                    {conflict.operatorName !== null
+                      ? `撞了${conflict.operatorName}师傅${
+                          conflict.roleNames.length > 0 ? `（${conflict.roleNames.join('、')}）` : ''
+                        }：${conflict.describe}`
+                      : conflict.describe}
+                  </Typography.Text>
+                ))}
+              </Space>
+            }
+          />
+        ) : (
+          <Alert
+            style={{ marginTop: 6 }}
+            type="success"
+            showIcon
+            message={`${slotText(scene.rehearsalSlot)} · 排 ${minutesToReadable(scene.rehearsalSlot.durationMinute)}，无撞期`}
+            description="该档期同时挡住后面别的场次；改场次时长或换操耍人后会自动重新判定。"
+          />
+        )}
+      </div>
+
+      <div>
+        <Space style={{ width: '100%', justifyContent: 'space-between' }} wrap>
           <Typography.Text type="secondary">排练进度</Typography.Text>
           <Space size={4}>
             <Button size="small" onClick={() => onProgress(-10)}>
@@ -534,7 +678,7 @@ function SceneDetailPanel({
       </Space>
 
       <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-        当前影窗：{SHADOW_SCREEN_LABEL[scene.needsShadowScreen]}；修改场序请拖动左侧手柄，场序会自动重排并落库。
+        当前影窗：{SHADOW_SCREEN_LABEL[scene.needsShadowScreen]}；修改场序请拖动左侧手柄，场序会自动重排并落库；已排档期会随场次时长联动并自动重判撞期。
       </Typography.Text>
     </Space>
   );

@@ -2,9 +2,20 @@
  * 场次（Scene）数据模型
  * 一出台戏按场序拆分出的排练单元，支持拖拽调序、勾选本次排练覆盖范围。
  */
+import type { Weekday } from './operator';
 
 /** 影窗规格 */
 export type ShadowScreenSpec = 'small' | 'standard' | 'large' | 'twin';
+
+/** 排练档期：一周中的固定排练时段，与操耍人档期、其他场次档期互相挡期 */
+export interface RehearsalSlot {
+  /** 星期，0 = 周日 */
+  weekday: Weekday;
+  /** 起始「分钟偏移」，相对当日 08:00 计算（与操耍人时段同一基准） */
+  startMinute: number;
+  /** 持续分钟数；排定时默认取场次时长，此后随场次时长联动 */
+  durationMinute: number;
+}
 
 export interface Scene {
   /** 主键，uuid */
@@ -23,6 +34,8 @@ export interface Scene {
   needsShadowScreen: ShadowScreenSpec;
   /** 排练进度 0-100 */
   progress: number;
+  /** 排练档期，未排定为 null */
+  rehearsalSlot: RehearsalSlot | null;
   /** 创建时间（ISO 字符串） */
   createdAt: string;
   /** 最近修改时间（ISO 字符串） */

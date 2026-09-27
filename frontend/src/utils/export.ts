@@ -13,6 +13,7 @@ import { ROLE_TYPE_LABEL, PROP_PART_LABEL } from '../types/role';
 import { PLAY_GENRE_LABEL, PLAY_STATUS_LABEL } from '../types/play';
 import { SHADOW_SCREEN_LABEL } from '../types/scene';
 import { SKILL_TAG_LABEL, minuteToClock, WEEKDAY_LABEL } from '../types/operator';
+import { slotText } from './schedule';
 
 /** 触发浏览器下载 */
 function download(filename: string, content: string, mime: string): void {
@@ -71,12 +72,24 @@ export function exportPlayCsv(
     return operators.find((item) => item.id === id)?.name ?? '（已解绑）';
   };
 
+  /** 某场次的参演操耍人（按角色去重） */
+  const castNames = (sceneId: string): string => {
+    const names = roles
+      .filter((role) => role.sceneId === sceneId && role.operatorId !== null)
+      .map((role) => operatorName(role.operatorId));
+    return [...new Set(names)].join('／');
+  };
+
   const header = [
     '场序',
     '场次',
     '时长(分钟)',
     '影窗规格',
     '排练进度(%)',
+    '排练星期',
+    '排练时间',
+    '排练时长(分钟)',
+    '参演师傅',
     '角色',
     '行当',
     '影件',
@@ -100,6 +113,7 @@ export function exportPlayCsv(
       const sceneRoles = roles.filter((role) => role.sceneId === scene.id);
       const sceneCues = cues.filter((cue) => cue.sceneId === scene.id).sort((a, b) => a.atSecond - b.atSecond);
       const rowCount = Math.max(sceneRoles.length, sceneCues.length, 1);
+      const slot = scene.rehearsalSlot;
       for (let index = 0; index < rowCount; index += 1) {
         const role = sceneRoles[index];
         const cue = sceneCues[index];
@@ -110,6 +124,10 @@ export function exportPlayCsv(
             index === 0 ? scene.durationMin : '',
             index === 0 ? SHADOW_SCREEN_LABEL[scene.needsShadowScreen] : '',
             index === 0 ? scene.progress : '',
+            index === 0 ? (slot ? WEEKDAY_LABEL[slot.weekday] : '未排定') : '',
+            index === 0 && slot ? `${minuteToClock(slot.startMinute)}-${minuteToClock(slot.startMinute + slot.durationMinute)}` : '',
+            index === 0 && slot ? slot.durationMinute : '',
+            index === 0 ? castNames(scene.id) || '待指派' : '',
             role ? role.name : '',
             role ? ROLE_TYPE_LABEL[role.roleType] : '',
             role ? role.propParts.map((part) => PROP_PART_LABEL[part]).join('／') || '无需拆件' : '',
@@ -202,8 +220,18 @@ export function buildCallSheetText(
     .sort((a, b) => a.seq - b.seq)
     .forEach((scene) => {
       const sceneRoles = roles.filter((role) => role.sceneId === scene.id);
+      const cast = [
+        ...new Set(
+          sceneRoles
+            .filter((role) => role.operatorId !== null)
+            .map((role) => operatorName(role.operatorId)),
+        ),
+      ];
+      const slot = scene.rehearsalSlot;
       lines.push(
-        `第${scene.seq}场 ${scene.title}｜${scene.durationMin}分钟｜${SHADOW_SCREEN_LABEL[scene.needsShadowScreen]}｜进度 ${scene.progress}%`,
+        `第${scene.seq}场 ${scene.title}｜${scene.durationMin}分钟｜${SHADOW_SCREEN_LABEL[scene.needsShadowScreen]}｜进度 ${scene.progress}%｜档期：${
+          slot ? `${slotText(slot)}（${slot.durationMinute}分钟）` : '未排定'
+        }｜参演：${cast.length > 0 ? cast.join('、') : '待指派'}`,
       );
       sceneRoles.forEach((role) => {
         lines.push(

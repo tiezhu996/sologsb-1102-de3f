@@ -82,6 +82,7 @@ export const useSceneStore = create<SceneStoreState>((set, get) => ({
       stageNote: draft.stageNote.trim(),
       needsShadowScreen: draft.needsShadowScreen,
       progress: clampProgress(draft.progress),
+      rehearsalSlot: null,
       createdAt: stamp,
       updatedAt: stamp,
       revision: ROW_REVISION,
@@ -112,6 +113,10 @@ export const useSceneStore = create<SceneStoreState>((set, get) => ({
       updatedAt: nowIso(),
       revision: ROW_REVISION,
     };
+    // 场次时长变化时，已排定的档期时长随场次时长联动，档期状态由页面重新判定
+    if (patch.durationMin !== undefined && patch.rehearsalSlot === undefined && existing.rehearsalSlot !== null) {
+      next.rehearsalSlot = { ...existing.rehearsalSlot, durationMinute: next.durationMin };
+    }
     await putScene(next);
     await get().loadScenes(existing.playId);
   },

@@ -3,6 +3,7 @@
  * 只在 plays 表为空时执行，保证界面第一次进入就有可点通的内容。
  */
 import { db, ROW_REVISION, type CueRow, type OperatorRow, type PlayRow, type RoleRow, type SceneRow } from './db';
+import type { Weekday } from '../types/operator';
 import { uuid, nowIso } from './uuid';
 
 interface SeedSceneSpec {
@@ -11,6 +12,8 @@ interface SeedSceneSpec {
   stageNote: string;
   needsShadowScreen: SceneRow['needsShadowScreen'];
   progress: number;
+  /** 预排的排练档期（时长随场次时长）；缺省表示尚未排定 */
+  rehearsal?: { weekday: Weekday; startMinute: number };
   roles: Array<{
     name: string;
     roleType: RoleRow['roleType'];
@@ -85,6 +88,7 @@ const PLAYS: SeedPlaySpec[] = [
         stageNote: '烟雨影窗拉满，四把青伞自左下入场，水袖走圆场两周。',
         needsShadowScreen: 'standard',
         progress: 100,
+        rehearsal: { weekday: 2, startMinute: 60 },
         roles: [
           {
             name: '白娘子',
@@ -114,6 +118,7 @@ const PLAYS: SeedPlaySpec[] = [
         stageNote: '影窗收至半幅，喜堂红影件更换约 40 秒，间以板鼓独奏垫场。',
         needsShadowScreen: 'large',
         progress: 72,
+        rehearsal: { weekday: 4, startMinute: 360 },
         roles: [
           {
             name: '白娘子',
@@ -199,6 +204,7 @@ const PLAYS: SeedPlaySpec[] = [
         stageNote: '老箱开启，影件依次投影于横幕，需人工换件配合板鼓。',
         needsShadowScreen: 'standard',
         progress: 15,
+        rehearsal: { weekday: 3, startMinute: 360 },
         roles: [
           {
             name: '老班主',
@@ -217,6 +223,7 @@ const PLAYS: SeedPlaySpec[] = [
         stageNote: '横幕滑动表现赶路，影件抄件需提前备两套。',
         needsShadowScreen: 'twin',
         progress: 0,
+        rehearsal: { weekday: 5, startMinute: 360 },
         roles: [
           {
             name: '少年班主',
@@ -244,6 +251,7 @@ const PLAYS: SeedPlaySpec[] = [
         stageNote: '武打走位需与锣鼓点逐拍对齐，兵器影件备双份。',
         needsShadowScreen: 'large',
         progress: 100,
+        rehearsal: { weekday: 1, startMinute: 360 },
         roles: [
           {
             name: '孙悟空',
@@ -314,6 +322,9 @@ export async function seedDatabase(): Promise<void> {
         stageNote: sceneSpec.stageNote,
         needsShadowScreen: sceneSpec.needsShadowScreen,
         progress: sceneSpec.progress,
+        rehearsalSlot: sceneSpec.rehearsal
+          ? { ...sceneSpec.rehearsal, durationMinute: sceneSpec.durationMin }
+          : null,
         createdAt: stamp,
         updatedAt: stamp,
         revision: ROW_REVISION,
