@@ -54,6 +54,8 @@ import {
   type RoleType,
 } from '../types/role';
 import { SHADOW_SCREEN_LABEL } from '../types/scene';
+import { WEEKDAY_LABEL, minuteToClock } from '../types/operator';
+import { scheduleLabel } from '../utils/schedule';
 import {
   ROW_REVISION,
   getScene,
@@ -83,7 +85,33 @@ export default function RoleAssign() {
   const plays = usePlayStore((state) => state.plays);
 
   const roleIds = useMemo(() => roles.map((role) => role.id), [roles]);
-  const conflict = useOperatorConflict(roleIds);
+  const conflict = useOperatorConflict(roleIds, scene?.schedule ?? null);
+
+  /** 换了操耍人以后重判：当前参演师傅里谁撞了本场已排的档期 */
+  const scheduleClashes = useMemo(() => {
+    if (!scene?.schedule) return [];
+    const slot = scene.schedule;
+    const hits: string[] = [];
+    roles.forEach((role) => {
+      if (role.operatorId === null) return;
+      const holder = operators.find((operator) => operator.id === role.operatorId);
+      if (!holder) return;
+      const busy = holder.busySlots.find(
+        (item) =>
+          item.weekday === slot.weekday &&
+          item.startMinute < slot.startMinute + slot.durationMinute &&
+          slot.startMinute < item.startMinute + item.durationMinute,
+      );
+      if (busy) {
+        hits.push(
+          `${holder.name}（${role.name}）${WEEKDAY_LABEL[busy.weekday]} ${minuteToClock(
+            busy.startMinute,
+          )}-${minuteToClock(busy.startMinute + busy.durationMinute)} 另有「${busy.label}」`,
+        );
+      }
+    });
+    return hits;
+  }, [scene?.schedule, roles, operators]);
 
   const reload = useCallback(async () => {
     setLoading(true);
@@ -391,6 +419,30 @@ export default function RoleAssign() {
             </Space>
           }
         />
+
+        {scene?.schedule ? (
+          <Alert
+            style={{ marginTop: 10 }}
+            type={scheduleClashes.length > 0 ? 'error' : 'success'}
+            showIcon
+            message={
+              scheduleClashes.length > 0
+                ? `本场档期 ${scheduleLabel(scene.schedule)} 与 ${scheduleClashes.length} 位师傅撞期，请换人或回场次页重排`
+                : `本场档期 ${scheduleLabel(scene.schedule)}，参演师傅时段均无冲突`
+            }
+            description={
+              scheduleClashes.length > 0 ? (
+                <Space direction="vertical" size={2}>
+                  {scheduleClashes.map((text) => (
+                    <Typography.Text key={text} type="danger" style={{ fontSize: 12 }}>
+                      {text}
+                    </Typography.Text>
+                  ))}
+                </Space>
+              ) : undefined
+            }
+          />
+        ) : null}
       </div>
 
       <div className="gb-panel">

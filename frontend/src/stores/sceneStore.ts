@@ -82,6 +82,7 @@ export const useSceneStore = create<SceneStoreState>((set, get) => ({
       stageNote: draft.stageNote.trim(),
       needsShadowScreen: draft.needsShadowScreen,
       progress: clampProgress(draft.progress),
+      schedule: null,
       createdAt: stamp,
       updatedAt: stamp,
       revision: ROW_REVISION,

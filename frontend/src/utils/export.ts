@@ -13,6 +13,7 @@ import { ROLE_TYPE_LABEL, PROP_PART_LABEL } from '../types/role';
 import { PLAY_GENRE_LABEL, PLAY_STATUS_LABEL } from '../types/play';
 import { SHADOW_SCREEN_LABEL } from '../types/scene';
 import { SKILL_TAG_LABEL, minuteToClock, WEEKDAY_LABEL } from '../types/operator';
+import { participantNamesOf, scheduleLabel } from './schedule';
 
 /** 触发浏览器下载 */
 function download(filename: string, content: string, mime: string): void {
@@ -74,6 +75,9 @@ export function exportPlayCsv(
   const header = [
     '场序',
     '场次',
+    '排练星期',
+    '排练时段',
+    '参演师傅',
     '时长(分钟)',
     '影窗规格',
     '排练进度(%)',
@@ -100,6 +104,7 @@ export function exportPlayCsv(
       const sceneRoles = roles.filter((role) => role.sceneId === scene.id);
       const sceneCues = cues.filter((cue) => cue.sceneId === scene.id).sort((a, b) => a.atSecond - b.atSecond);
       const rowCount = Math.max(sceneRoles.length, sceneCues.length, 1);
+      const participants = participantNamesOf(scene.id, roles, operators).join('／');
       for (let index = 0; index < rowCount; index += 1) {
         const role = sceneRoles[index];
         const cue = sceneCues[index];
@@ -107,6 +112,9 @@ export function exportPlayCsv(
           [
             index === 0 ? scene.seq : '',
             index === 0 ? scene.title : '',
+            index === 0 ? (scene.schedule ? WEEKDAY_LABEL[scene.schedule.weekday] : '未排档期') : '',
+            index === 0 ? (scene.schedule ? scheduleLabel(scene.schedule) : '') : '',
+            index === 0 ? participants || '待指派' : '',
             index === 0 ? scene.durationMin : '',
             index === 0 ? SHADOW_SCREEN_LABEL[scene.needsShadowScreen] : '',
             index === 0 ? scene.progress : '',
@@ -202,8 +210,10 @@ export function buildCallSheetText(
     .sort((a, b) => a.seq - b.seq)
     .forEach((scene) => {
       const sceneRoles = roles.filter((role) => role.sceneId === scene.id);
+      const scheduleText = scene.schedule ? scheduleLabel(scene.schedule) : '档期未定';
+      const participants = participantNamesOf(scene.id, roles, operators).join('、') || '待指派';
       lines.push(
-        `第${scene.seq}场 ${scene.title}｜${scene.durationMin}分钟｜${SHADOW_SCREEN_LABEL[scene.needsShadowScreen]}｜进度 ${scene.progress}%`,
+        `第${scene.seq}场 ${scene.title}｜${scheduleText}｜${scene.durationMin}分钟｜${SHADOW_SCREEN_LABEL[scene.needsShadowScreen]}｜进度 ${scene.progress}%｜参演师傅：${participants}`,
       );
       sceneRoles.forEach((role) => {
         lines.push(

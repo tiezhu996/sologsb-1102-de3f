@@ -11,6 +11,8 @@ interface SeedSceneSpec {
   stageNote: string;
   needsShadowScreen: SceneRow['needsShadowScreen'];
   progress: number;
+  /** 排练档期（星期 / 08:00 起分钟偏移 / 时长），未排为 null */
+  schedule: SceneRow['schedule'];
   roles: Array<{
     name: string;
     roleType: RoleRow['roleType'];
@@ -81,6 +83,7 @@ const PLAYS: SeedPlaySpec[] = [
     scenes: [
       {
         title: '第一场·游湖',
+      schedule: { weekday: 1, startMinute: 300, durationMinute: 60 },
         durationMin: 14,
         stageNote: '烟雨影窗拉满，四把青伞自左下入场，水袖走圆场两周。',
         needsShadowScreen: 'standard',
@@ -110,6 +113,7 @@ const PLAYS: SeedPlaySpec[] = [
       },
       {
         title: '第二场·结亲',
+      schedule: { weekday: 2, startMinute: 60, durationMinute: 90 },
         durationMin: 18,
         stageNote: '影窗收至半幅，喜堂红影件更换约 40 秒，间以板鼓独奏垫场。',
         needsShadowScreen: 'large',
@@ -147,6 +151,7 @@ const PLAYS: SeedPlaySpec[] = [
       },
       {
         title: '第三场·水漫',
+      schedule: { weekday: 4, startMinute: 360, durationMinute: 90 },
         durationMin: 22,
         stageNote: '双联影窗换水族影件，锣鼓全堂入，末段灯暗留白三秒。',
         needsShadowScreen: 'twin',
@@ -195,6 +200,7 @@ const PLAYS: SeedPlaySpec[] = [
     scenes: [
       {
         title: '第一场·开箱',
+      schedule: { weekday: 3, startMinute: 360, durationMinute: 60 },
         durationMin: 16,
         stageNote: '老箱开启，影件依次投影于横幕，需人工换件配合板鼓。',
         needsShadowScreen: 'standard',
@@ -213,6 +219,7 @@ const PLAYS: SeedPlaySpec[] = [
       },
       {
         title: '第二场·走班',
+      schedule: null,
         durationMin: 20,
         stageNote: '横幕滑动表现赶路，影件抄件需提前备两套。',
         needsShadowScreen: 'twin',
@@ -240,6 +247,7 @@ const PLAYS: SeedPlaySpec[] = [
     scenes: [
       {
         title: '第一场·借扇',
+      schedule: { weekday: 5, startMinute: 360, durationMinute: 60 },
         durationMin: 19,
         stageNote: '武打走位需与锣鼓点逐拍对齐，兵器影件备双份。',
         needsShadowScreen: 'large',
@@ -314,6 +322,7 @@ export async function seedDatabase(): Promise<void> {
         stageNote: sceneSpec.stageNote,
         needsShadowScreen: sceneSpec.needsShadowScreen,
         progress: sceneSpec.progress,
+        schedule: sceneSpec.schedule,
         createdAt: stamp,
         updatedAt: stamp,
         revision: ROW_REVISION,

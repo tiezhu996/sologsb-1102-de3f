@@ -139,6 +139,7 @@ export const usePlayStore = create<PlayStoreState>((set, get) => ({
       stageNote: '在此填写影窗、影件更换与走位提示',
       needsShadowScreen: 'standard',
       progress: 0,
+      schedule: null,
       createdAt: stamp,
       updatedAt: stamp,
       revision: ROW_REVISION,

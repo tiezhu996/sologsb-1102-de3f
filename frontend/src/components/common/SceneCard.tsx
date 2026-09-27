@@ -49,6 +49,8 @@ export interface SceneCardProps {
   onDragEnd?: (event: DragEvent<HTMLDivElement>) => void;
   /** 额外操作按钮 */
   extraActions?: ReactNode;
+  /** 排练档期标签（场次页传入，含冲突高亮） */
+  scheduleTag?: ReactNode;
 }
 
 export function SceneCard({
@@ -72,6 +74,7 @@ export function SceneCard({
   onDrop,
   onDragEnd,
   extraActions,
+  scheduleTag,
 }: SceneCardProps) {
   const level = maturityOf(scene.progress);
   const unassigned = Math.max(0, roleCount - assignedCount);
@@ -123,6 +126,7 @@ export function SceneCard({
               <Tag color="gold">{minutesToReadable(scene.durationMin)}</Tag>
               {startTimecode ? <Tag color="blue">{startTimecode} 起</Tag> : null}
               {endTimecode ? <Tag color="blue">{endTimecode} 收</Tag> : null}
+              {scheduleTag}
             </Space>
             {scene.stageNote ? (
               <Typography.Paragraph

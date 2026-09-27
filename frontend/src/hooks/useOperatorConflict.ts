@@ -1,13 +1,16 @@
 /**
- * useOperatorConflict(roleIds)
+ * useOperatorConflict(roleIds, sceneSlot?)
  * 按操耍人已排时段计算冲突，并在指派时拦截；被角色指派页消费。
+ * 传入场次已排的档期后，候选人若在该时段另有活计同样会被拦截。
  */
 import { useCallback, useMemo } from 'react';
 import { useOperatorStore } from '../stores/operatorStore';
 import { db, ROW_REVISION } from '../utils/db';
 import { nowIso } from '../utils/uuid';
+import type { RehearsalSlot } from '../types/scene';
 import type { SlotRange, Weekday } from '../types/operator';
 import { WEEKDAY_LABEL, minuteToClock, slotsOverlap } from '../types/operator';
+import { scheduleLabel } from '../utils/schedule';
 
 /** 两个操耍人时段的冲突描述 */
 export interface OperatorConflictPair {
@@ -55,7 +58,7 @@ function describePair(left: SlotRange, right: SlotRange): string {
   return `${left.label} 与 ${right.label} 在${WEEKDAY_LABEL[left.weekday]} ${from}-${to} 重叠`;
 }
 
-export function useOperatorConflict(roleIds: string[]): UseOperatorConflictResult {
+export function useOperatorConflict(roleIds: string[], sceneSlot: RehearsalSlot | null = null): UseOperatorConflictResult {
   const operators = useOperatorStore((state) => state.operators);
   const loading = useOperatorStore((state) => state.loading);
   const loadOperators = useOperatorStore((state) => state.loadOperators);
@@ -140,6 +143,26 @@ export function useOperatorConflict(roleIds: string[]): UseOperatorConflictResul
           blockReason: `该操耍人自身档期重叠：${selfText}`,
         };
       }
+      // 场次已排档期：候选人该时段另有活计的，一并拦下
+      if (sceneSlot) {
+        const holder = operators.find((operator) => operator.id === operatorId);
+        const hit = holder?.busySlots.find(
+          (busy) =>
+            busy.weekday === sceneSlot.weekday &&
+            busy.startMinute < sceneSlot.startMinute + sceneSlot.durationMinute &&
+            sceneSlot.startMinute < busy.startMinute + busy.durationMinute,
+        );
+        if (holder && hit) {
+          return {
+            operatorId,
+            selfConflict: false,
+            selfConflictText: selfText,
+            crossConflicts,
+            assignable: false,
+            blockReason: `本场已排 ${scheduleLabel(sceneSlot)}，${holder.name} 该时段另有「${hit.label}」`,
+          };
+        }
+      }
       if (crossConflicts.length > 0) {
         return {
           operatorId,
@@ -159,7 +182,7 @@ export function useOperatorConflict(roleIds: string[]): UseOperatorConflictResul
         blockReason: '',
       };
     },
-    [operators, roleIds, selfConflicts, slotRangesOf],
+    [operators, roleIds, selfConflicts, slotRangesOf, sceneSlot],
   );
 
   const bind = useCallback(
